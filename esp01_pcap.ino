@@ -7,6 +7,7 @@ extern "C" {
 }
 
 #define INIT_CHANNEL 1
+// Set baud rate to 115200, otherwise it may run out of memory
 #define BAUD_RATE 115200
 #define MAX_CHANNEL 11
 #define HOP_TIME 250
@@ -32,12 +33,12 @@ void sniffer(uint8_t *buf, uint16_t len) {
 void setup() {
   
   Serial.begin(BAUD_RATE);
-  // Wait for hardware initialization
+  // wait for hardware initialization
   delay(10000);
   pcap.startSerial();
   
-  /* setup wifi */
-  wifi_set_opmode(STATION_MODE);
+  // setup wifi
+  WiFi.mode(WIFI_STA);
   wifi_promiscuous_enable(0);
   WiFi.disconnect();
   wifi_set_promiscuous_rx_cb(sniffer);

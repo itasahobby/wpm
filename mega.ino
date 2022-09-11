@@ -1,6 +1,6 @@
-/*************************************/
+/************************************/
 /* General                           */
-/*************************************/
+/************************************/
 #include <SPI.h>
 #include <SD.h>
 #include <XBee.h>
@@ -14,57 +14,50 @@
 
 File f_wifi, f_ble, f_xbee;
 
-/*************************************/
+/************************************/
 /* BLE                               */
-/*************************************/
+/************************************/
 
-char c_ble = ' ';
-
-void delayAndRead() {
-  delay(50);
-  while(Serial_Bluetooth.available())
-  {
-    c_ble = Serial_Bluetooth.read();
-  }
+// Ignore the outcome, it should return "OK" from AT commands
+void delayedRead() {
   delay(800);
+  while(Serial_Bluetooth.available()) {
+    Serial_Bluetooth.read();
+  }
 }
 
-void initHC05ToInq() {
-    Serial_Bluetooth.println("AT+CMODE=1");// Enable connect to any device
-    delayAndRead();
-    Serial_Bluetooth.println("AT+ROLE=1");// Set to master in order to enable scanning
-    delayAndRead();
-    Serial_Bluetooth.println("AT+INQM=1,10,24");//RSSI, Max 10 devices, ~30s
-    delayAndRead();
-    Serial_Bluetooth.println("AT+CLASS=0");// Disable COD filter
-    delayAndRead();
-    Serial_Bluetooth.println("AT+INIT");// Init.
-    delayAndRead();
+void HC05_init() {
+  
+  // connect any address
+  Serial_Bluetooth.println("AT+CMODE=1");
+  delayedRead();
+  // Set to master in order to enable scanning
+  Serial_Bluetooth.println("AT+ROLE=1");
+  delayedRead();
+  //Set query access patters to RSSI, Max 10 devices, ~60s
+  Serial_Bluetooth.println("AT+INQM=1,10,48");
+  delayedRead();
+  // Disable COD filter to list all devices
+  Serial_Bluetooth.println("AT+CLASS=0");
+  delayedRead();
+  // Init.
+  Serial_Bluetooth.println("AT+INIT");
+  delayedRead();
 }
 
-/*************************************/
-/* XBEE                              */
-/*************************************/
-
-/* Code adapted from ZdpScan*/
-
-#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-#error This code relies on little endian integers!
-#endif
+/************************************/
+/* XBEE (adapted from xbee-arduino)  */
+/************************************/
 
 XBeeWithCallbacks xbee;
 
-/** Helper to generate sequential Zdo transaction identifiers */
+// Helper to generate sequential Zdo transaction identifiers
 uint8_t getNextTransactionId() {
   static uint8_t id = 0;
   return id++;
 }
 
-#ifndef lengthof
-#define lengthof(x) (sizeof(x)/sizeof(*x))
-#endif
-
-/**
+/*
  * Helper function to print a field name, followed by the hexadecimal
  * value and a newline.
  */
@@ -130,7 +123,7 @@ bool matchZdoReply(ZBExplicitRxResponse& rx, uintptr_t data) {
          payload[0] == transactionId;
 }
 
-/**
+/*
  * Create a tx request to send a Zdo request.
  */
 ZBExplicitTxRequest buildZdoRequest(XBeeAddress64 addr, uint16_t cluster_id, uint8_t *payload, size_t len) {
@@ -143,7 +136,7 @@ ZBExplicitTxRequest buildZdoRequest(XBeeAddress64 addr, uint16_t cluster_id, uin
   return tx;
 }
 
-/**
+/*
  * Create a zdo request, send it and wait for a reply (which will be
  * stored in the given response object).
  * Returns true when a response was received, returns false if something
@@ -181,7 +174,7 @@ bool handleZdoRequest(const __FlashStringHelper *msg, ZBExplicitRxResponse& rx, 
   }
 }
 
-/**
+/*
  * Request a list of active endpoints from the node with the given
  * address. Print the endpoints discovered and then request more details
  * for each of the endpoints and print those too.
@@ -266,8 +259,8 @@ bool getAtValue(uint8_t cmd[2], uint8_t *buf, size_t len, uint16_t timeout = 150
   return true;
 }
 
-// Invert the endianness of a given buffer
-void invertEndian(uint8_t *buf, size_t len) {
+// Invert endianness
+void switch_endianness(uint8_t *buf, size_t len) {
   for (uint8_t i = 0, j = len - 1; i < len/2; ++i, j--) {
     uint8_t tmp = buf[i];
     buf[i] = buf[j];
@@ -275,7 +268,7 @@ void invertEndian(uint8_t *buf, size_t len) {
   }
 }
 
-/**
+/*
  * Struct to keep info about discovered nodes.
  */
 struct node_info {
@@ -285,13 +278,13 @@ struct node_info {
   uint8_t visited: 1;
 };
 
-/**
+/*
  * List of nodes found.
  */
 node_info nodes[10];
 uint8_t nodes_found = 0;
 
-/**
+/*
  * Scan the network and discover all other nodes by traversing neighbour
  * tables. The discovered nodes are stored in the nodes array.
  */
@@ -300,9 +293,9 @@ void scan_network() {
   // Fetch our operating PAN ID, to filter the LQI results
   uint8_t pan_id[8];
   getAtValue((uint8_t*)"OP", pan_id, sizeof(pan_id));
-  // XBee sends in big-endian, but ZDO requests use little endian. For
-  // easy comparsion, convert to little endian
-  invertEndian(pan_id, sizeof(pan_id));
+
+  // XBee and ZDO requests use different endianness
+  switch_endianness(pan_id, sizeof(pan_id));
 
   // Fetch the addresses of the local node
   XBeeAddress64 local;
@@ -407,7 +400,7 @@ void scan_network() {
         }
         nodes_found++;
 
-        if (nodes_found == lengthof(nodes)) {
+        if (nodes_found == (sizeof(nodes)/sizeof(*nodes)) ) {
           f_xbee.println(F("Device table full, terminating network scan"));
           return;
         }
@@ -443,7 +436,7 @@ void setup(void) {
   Serial_Bluetooth.begin(38400);  
 
   // Set correct states for inq
-  initHC05ToInq();
+  HC05_init();
 
   // Start inq
   Serial_Bluetooth.println("AT+INQ");
